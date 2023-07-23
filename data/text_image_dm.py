@@ -60,7 +60,7 @@ class TextImageDataset(Dataset):
 
     def __len__(self):
         return len(self.keys)
-    
+
     def fix_img(self, img):
         return img.convert('RGB') if img.mode != 'RGB' else img
 
@@ -87,13 +87,17 @@ class TextImageDataset(Dataset):
         descriptions = list(filter(lambda t: len(t) > 0, descriptions))
         try:
             description = choice(descriptions)
+            # if len(description.split(' ')) > 77:
+            #     description = ' '.join(description.split(' ')[:77])
         except IndexError as zero_captions_in_file_ex:
             print(f"An exception occurred trying to load file {text_file}.")
             print(f"Skipping index {ind}")
             return self.skip_sample(ind)
-
-        tokenized_text = description if self.custom_tokenizer else clip.tokenize(description)[0]
-
+        try:
+            # tokenized_text = description if self.custom_tokenizer else clip.tokenize(description)[0]
+            tokenized_text = description if self.custom_tokenizer else clip.tokenize(description, truncate=True)[0]
+        except RuntimeError:
+            return self.skip_sample(ind)
         try:
             image_tensor = self.image_transform(PIL.Image.open(image_file))
         except (PIL.UnidentifiedImageError, OSError) as corrupt_image_exceptions:
@@ -126,14 +130,14 @@ class TextImageDataModule(LightningDataModule):
             custom_tokenizer (transformers.AutoTokenizer, optional): The tokenizer to use on the text. Defaults to None.
         """
         super().__init__()
-        self.folder =folder
+        self.folder = folder
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.image_size = image_size
         self.resize_ratio = resize_ratio
         self.shuffle = shuffle
         self.custom_tokenizer = custom_tokenizer
-    
+
     @staticmethod
     def add_argparse_args(parent_parser):
         parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
@@ -144,13 +148,13 @@ class TextImageDataModule(LightningDataModule):
         parser.add_argument('--resize_ratio', type=float, default=0.75, help='minimum size of images during random crop')
         parser.add_argument('--shuffle', type=bool, default=False, help='whether to use shuffling during sampling')
         return parser
-    
+
     def setup(self, stage=None):
         self.dataset = TextImageDataset(self.folder, image_size=self.image_size, resize_ratio=self.resize_ratio, shuffle=self.shuffle, custom_tokenizer=not self.custom_tokenizer is None)
-    
+
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=self.num_workers, drop_last=True , collate_fn=self.dl_collate_fn)
-    
+
     def dl_collate_fn(self, batch):
         if self.custom_tokenizer is None:
             return torch.stack([row[0] for row in batch]), torch.stack([row[1] for row in batch])

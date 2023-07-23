@@ -30,23 +30,22 @@ class CLIPWrapper(pl.LightningModule):
         self.isViT = 'ViT' in self.model_name
 
         self.automatic_optimization = False
-    
-    # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
-    @property
-    def num_training_steps(self) -> int:
+
+    def get_num_training_steps(self) -> int:
         """Total training steps inferred from datamodule and devices."""
-        dataset = self.train_dataloader()
-        if self.trainer.max_steps:
+        if self.trainer.max_steps != -1:
             return self.trainer.max_steps
 
-        dataset_size = len(dataset)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_batch_size = dataset.batch_size * self.trainer.accumulate_grad_batches * num_devices
+        dataset_size = len(self.trainer.datamodule.dataset)
+        print("dataset_size", dataset_size)
+        num_devices = max(1, self.trainer.num_devices)
+        effective_batch_size = self.trainer.datamodule.batch_size * self.trainer.accumulate_grad_batches * num_devices
         return (dataset_size // effective_batch_size) * self.trainer.max_epochs
+
+    def setup(self, stage):
+        # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
+        self.num_training_steps = self.get_num_training_steps()
+        # self.num_training_steps = self.trainer.estimated_stepping_batches // self.trainer.max_epochs
 
     # Training loss: https://github.com/openai/CLIP/issues/83
     # Mini-batching thanks to https://github.com/crowsonkb / https://twitter.com/RiversHaveWings
@@ -141,13 +140,15 @@ class CLIPWrapper(pl.LightningModule):
 
         # Source: https://github.com/openai/CLIP/issues/107
         # Use pip install 'git+https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup'
+        print("num_training_steps", self.num_training_steps)
         lr_scheduler = CosineAnnealingWarmupRestarts(
             optimizer,
             first_cycle_steps=self.num_training_steps,
             cycle_mult=1.0,
             max_lr=lr,
             min_lr=0,
-            warmup_steps=2000
+            warmup_steps=max(1, int(self.num_training_steps * 0.2))
+            # warmup_steps=2000
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}

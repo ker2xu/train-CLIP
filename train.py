@@ -15,8 +15,8 @@ def main(hparams):
 
     model = CLIPWrapper(hparams.model_name, config, hparams.minibatch_size)
     del hparams.model_name
-    dm = TextImageDataModule.from_argparse_args(hparams)
-    trainer = Trainer.from_argparse_args(hparams, precision=16, max_epochs=32)
+    dm = TextImageDataModule(hparams.folder, hparams.batch_size)
+    trainer = Trainer(precision=16, max_epochs=32, strategy='ddp_find_unused_parameters_true')
     trainer.fit(model, dm)
 
 
@@ -25,7 +25,6 @@ if __name__ == '__main__':
     parser.add_argument('--model_name', type=str, required=True)
     parser.add_argument('--minibatch_size', type=int, default=0)
     parser = TextImageDataModule.add_argparse_args(parser)
-    parser = Trainer.add_argparse_args(parser)
     args = parser.parse_args()
 
     main(args)
