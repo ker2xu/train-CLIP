@@ -1,18 +1,18 @@
 # train-CLIP 📎
 
 A PyTorch Lightning solution to training CLIP from both scratch and fine-tuning.
- 
+
 ## Usage 🚂
 
 ### From Scratch 🌵
 This training setup is easily usable right outside the box! Simply provide a training directory or your own dataset and we've got the rest covered. To train a model just specify a name from the paper name and tell us your training folder and batch size. All possible models can be seen in the yaml files in `models/config`
 
 ```
-python train.py --model_name RN50 --folder data_dir --batchsize 512
+python train.py --model_name RN50 --folder bench --batch_size 512
 ```
 
 ### Data-Efficient Finetuning 🚆
-To perform CLIP training much more efficiently, you might be interested in the class `CustomCLIPWrapper`. This functions as a way to finetune pre-trained image and language models; in turn this leads to a large performance efficiency increase! In order to use this, one simply needs to modify the `train_finetune.py` file to pass an image encoder and Hugging Face text encoder. 
+To perform CLIP training much more efficiently, you might be interested in the class `CustomCLIPWrapper`. This functions as a way to finetune pre-trained image and language models; in turn this leads to a large performance efficiency increase! In order to use this, one simply needs to modify the `train_finetune.py` file to pass an image encoder and Hugging Face text encoder.
 
 ```python
 img_encoder = resnet50(pretrained=True)
@@ -26,7 +26,7 @@ model = CustomCLIPWrapper(img_encoder, txt_encoder, hparams.minibatch_size, avg_
 
 The command line argument is the same as before minus the `--model_name` flag:
 ```
-python train.py --model_name RN50 --folder data_dir --batchsize 512
+python train_finetune.py --folder bench --batch_size 512
 ```
 
 ### Training with our DataModule 📉
@@ -91,7 +91,7 @@ Data-Efficient Language-Supervised Zero-Shot Learning with Self-Distillation
   - [x] all models
 - [x] Create model wrapper
 - [x] Create lightning trainer
-- [x] Create dataset files 
+- [x] Create dataset files
 - [ ] Performance boosts
   - [x] Mixed-precision
   - [x] Self-distillation

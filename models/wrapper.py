@@ -21,6 +21,7 @@ class CLIPWrapper(pl.LightningModule):
         Args:
             model_name (str): A case sensitive visual model name.
             config (dict): A dictionary containing the CLIP instantiation parameters.
+            minibatch_size (int): Minibatch size of a batch, should be multiple of global rank (total gpu num).
         """
         super().__init__()
 
@@ -37,15 +38,21 @@ class CLIPWrapper(pl.LightningModule):
             return self.trainer.max_steps
 
         dataset_size = len(self.trainer.datamodule.dataset)
-        print("dataset_size", dataset_size)
         num_devices = max(1, self.trainer.num_devices)
         effective_batch_size = self.trainer.datamodule.batch_size * self.trainer.accumulate_grad_batches * num_devices
+        if self.global_rank == 0:
+            print("dataset_size", dataset_size)
+            print("batch_size", self.trainer.datamodule.batch_size)
+            print("accumulate_grad_batches", self.trainer.accumulate_grad_batches)
+            print("num_devices", num_devices)
         return (dataset_size // effective_batch_size) * self.trainer.max_epochs
 
     def setup(self, stage):
         # Sourced from https://github.com/PyTorchLightning/pytorch-lightning/issues/5449
         self.num_training_steps = self.get_num_training_steps()
         # self.num_training_steps = self.trainer.estimated_stepping_batches // self.trainer.max_epochs
+        if self.global_rank == 0:
+            print("num_training_steps", self.num_training_steps)
 
     # Training loss: https://github.com/openai/CLIP/issues/83
     # Mini-batching thanks to https://github.com/crowsonkb / https://twitter.com/RiversHaveWings
@@ -84,6 +91,13 @@ class CLIPWrapper(pl.LightningModule):
         if isinstance(optimizer, list):
             optimizer = optimizer[0]
         optimizer.zero_grad()
+
+        # if self.global_rank == 0:
+        #     print("len(image)", len(image), "minibatch_size", self.minibatch_size, "n", n)
+        #     print("image.shape", image.shape, "text.shape", text.shape)
+        #     print("ims", "len", len(ims), "ims[0].shape", ims[0].shape)
+        #     print("txt", "len", len(txt), "txt[0].shape", txt[0].shape)
+        # raise
 
         # image loss
         for j, mb in enumerate(image_mbs):
@@ -140,7 +154,6 @@ class CLIPWrapper(pl.LightningModule):
 
         # Source: https://github.com/openai/CLIP/issues/107
         # Use pip install 'git+https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup'
-        print("num_training_steps", self.num_training_steps)
         lr_scheduler = CosineAnnealingWarmupRestarts(
             optimizer,
             first_cycle_steps=self.num_training_steps,
@@ -244,6 +257,13 @@ class CustomCLIPWrapper(CLIPWrapper):
             optimizer = optimizer[0]
         optimizer.zero_grad()
 
+        # if self.global_rank == 0:
+        #     print("len(image)", len(image), "minibatch_size", self.minibatch_size, "n", n)
+        #     print("image.shape", image.shape, "text.shape", text.shape)
+        #     print("ims", "len", len(ims), "ims[0].shape", ims[0].shape)
+        #     print("txt", "len", len(txt), "txt[0].shape", txt[0].shape)
+        # raise
+
         # image loss
         for j, mb in enumerate(image_mbs):
             images_tmp = copy.deepcopy(ims)
@@ -339,7 +359,8 @@ class CustomCLIPWrapper(CLIPWrapper):
             cycle_mult=1.0,
             max_lr=lr,
             min_lr=0,
-            warmup_steps=2000
+            warmup_steps=max(1, int(self.num_training_steps * 0.2))
+            # warmup_steps=2000
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
